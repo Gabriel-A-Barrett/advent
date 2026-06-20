@@ -1,31 +1,64 @@
+use std::collections::HashMap;
 use std::fs;
 
 fn main() {
     println!("Calculating shortest distance to junction boxes");
 
-    let contents = fs::read_to_string("test.txt").unwrap();
+    let contents = fs::read_to_string("input.txt").unwrap();
     
     let junctions: Vec<Junction> = contents.trim().lines()
         .map ( |s| Junction::from_input(s))
         .collect();
 
-    let mut pairs: Vec<ConnectionPairs> = Vec::new();
+    let mut parent: Vec<usize> = (0..junctions.len()).collect();
+    let mut edges: Vec<Edge> = Vec::new();
     for (i, j1) in junctions.iter().enumerate() {
-        let (_, remaining) = junctions.split_at(i + 1);
-        for j2 in remaining {
-            let euc = Junction::euclidean_distance(&j1, &j2);
-            pairs.push(ConnectionPairs { j1: *j1, j2: *j2, euc: euc})
+        for (j, j2) in junctions.iter().enumerate().skip(i + 1) {
+            edges.push(Edge {
+                j1_idx: i,
+                j2_idx: j,
+                euc: Junction::euclidean_distance(j1, j2),
+            });
         }
     }
 
-    //NOTE: SORTING shortest to longest
-    pairs.sort_by(|a,b| a.euc.partial_cmp(&b.euc).unwrap() );
+    //NOTE: SORTING shortest to longest based on euclidean
+    edges.sort_by(|a,b| a.euc.partial_cmp(&b.euc).unwrap() );
+    let n = junctions.len();
+    let mut accepted = 0;
+    let mut bridging: Option<&Edge> = None;
+    for edge in &edges { // NOTE: add a .iter().take(1000) to limit the number of connections
+        let r1 = find(&mut parent, edge.j1_idx);
+        let r2 = find (&mut parent, edge.j2_idx);
+        if r1 == r2 { continue; }
+        parent[r1] = r2;
+        accepted += 1;
+        
+        if accepted == n - 1 {
+            bridging = Some(edge);
+            break;
+        }
+    }
 
-    let mut connections: Vec<Vec<Junction>> = Vec::new();     
-    let max_connections = 10;
-    let mut con = 1;
+    let e = bridging.expect("graph never fully connected");
+    let x1 = junctions[e.j1_idx].x as i64;
+    let x2 = junctions[e.j2_idx].x as i64;
 
-    let mut parent: Vec<usize> = (0..junctions.len()).collect();
+    println!("{}", x1 * x2);
+
+
+    //let mut sizes: HashMap<usize, usize> = HashMap::new();
+    //for i in 0..junctions.len() {
+    //    let root = find(&mut parent, i);
+    //    *sizes.entry(root).or_insert(0) += 1;
+    //}
+
+    //let mut counts: Vec<usize> = sizes.into_values().collect();
+    //counts.sort_unstable_by(|a, b| b.cmp(a)); // descending
+    //
+    //let mut total: usize = counts.iter().take(3).product();
+    //println!("{total}");
+
 
     //let total = connections[0].len() * connections[1].len() * connections[2].len();
 
@@ -38,13 +71,13 @@ fn find(parent: &mut Vec<usize>, x: usize) -> usize {
 }
 
 #[derive(Debug)]
-struct ConnectionPairs {
-    j1: Junction,
-    j2: Junction,
+struct Edge { // NOTE: Based on Kruskal-path MST
+    j1_idx: usize,
+    j2_idx: usize,
     euc: f32,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug)]
 struct Junction {
     x: f32,
     y: f32,
